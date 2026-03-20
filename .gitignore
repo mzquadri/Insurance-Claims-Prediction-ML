@@ -1,0 +1,15 @@
+data/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.env
+.venv/
+venv/
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+.ipynb_checkpoints/
+results/*.pkl
+results/*.png
+results/*.csv
