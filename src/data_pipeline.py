@@ -137,22 +137,32 @@ def encode_and_split(
         target_col = target_candidates[0]
         print(f"Using '{target_col}' as target column")
 
+    if target_col not in df.columns:
+        raise ValueError(
+            f"Target column '{target_col}' was not found. Available columns: "
+            f"{', '.join(df.columns)}"
+        )
+
     y = df[target_col].values
-    X = df.drop(columns=[target_col])
+    X = df.drop(columns=[target_col]).copy()
+
+    # Split before fitting preprocessing artifacts so test-set categories and
+    # distributions cannot influence the training representation.
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=test_size, random_state=random_state, stratify=y
+    )
 
     # Encode categoricals
     label_encoders = {}
-    for col in X.select_dtypes(include=["object", "category"]).columns:
+    for col in X_train.select_dtypes(include=["object", "category"]).columns:
         le = LabelEncoder()
-        X[col] = le.fit_transform(X[col].astype(str))
+        X_train[col] = le.fit_transform(X_train[col].astype(str))
+        unknown_value = -1
+        mapping = {label: index for index, label in enumerate(le.classes_)}
+        X_test[col] = X_test[col].astype(str).map(mapping).fillna(unknown_value).astype(int)
         label_encoders[col] = le
 
-    feature_names = X.columns.tolist()
-
-    # Train/test split (stratified)
-    X_train, X_test, y_train, y_test = train_test_split(
-        X.values, y, test_size=test_size, random_state=random_state, stratify=y
-    )
+    feature_names = X_train.columns.tolist()
 
     # Scale numeric features
     scaler = StandardScaler()

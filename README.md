@@ -1,91 +1,64 @@
-# Insurance Claims Prediction - ML Pipeline
+# Insurance Claims Prediction: Research Pipeline
 
-End-to-end machine learning solution for insurance claims prediction, featuring model calibration, threshold optimization, and business-aligned performance metrics. This project demonstrates a production-grade approach to building ML models for insurance risk assessment.
+An experimental binary-classification pipeline for studying insurance-claim modelling, probability calibration, threshold selection, and feature attribution. It is a learning and research artifact, not a production underwriting, pricing, fraud, or claims-decision system.
 
-## Project Overview
+## Scope and evidence
 
-Predicting insurance claim likelihood and severity is critical for pricing, underwriting, and fraud detection. This project builds a complete ML pipeline that:
+The repository contains source code and notebooks only. It does **not** version the Kaggle data, a train/test split, trained model, calibration output, or evaluation report. Consequently, this repository makes no verified accuracy, AUC, calibration-improvement, or business-value claim.
 
-- **Feature engineering**: Domain-specific feature construction from policyholder and claim data
-- **Model selection**: Comparison of Logistic Regression, Random Forest, XGBoost, and LightGBM
-- **Calibration**: Platt scaling and isotonic regression for reliable probability estimates
-- **Thresholding**: Business-driven threshold optimization balancing precision/recall trade-offs
-- **Explainability**: SHAP values for model interpretability and feature importance
+The pipeline can download the dataset named below through the Kaggle CLI, subject to Kaggle credentials, dataset availability, and the dataset's terms. Before using any external data, confirm that its license, intended use, privacy constraints, and feature definitions permit the proposed work. Do not use this code to make automated decisions about people or policies.
 
-## Dataset
+## Included methods
 
-**Insurance Claims Dataset** from [Kaggle](https://www.kaggle.com/datasets/thedevastator/prediction-of-insurance-claim)
-- Features: policyholder demographics, vehicle info, policy details
-- Target: Binary classification (claim filed vs. no claim)
+- Cleaning and optional feature engineering for common policy and vehicle columns.
+- A train/test split with categorical encoders and numeric scaling fit on training data only.
+- Logistic regression, random forest, and optional XGBoost/LightGBM comparisons.
+- Cross-validated calibration and exploratory threshold analysis.
+- Optional SHAP-based feature attribution.
 
-## Project Structure
+The example cost matrix in `src/threshold_optimizer.py` is illustrative only. It is not a validated business policy and must not be used without domain, legal, fairness, and risk review.
 
-```
-Insurance-Claims-Prediction-ML/
-├── README.md
-├── requirements.txt
-├── .gitignore
-├── src/
-│   ├── __init__.py
-│   ├── data_pipeline.py      # Data loading, cleaning, feature engineering
-│   ├── model_training.py     # Model training with cross-validation
-│   ├── calibration.py        # Probability calibration methods
-│   ├── threshold_optimizer.py # Business-driven threshold selection
-│   └── explainability.py     # SHAP-based model explanations
-├── notebooks/
-│   ├── 01_EDA_and_Feature_Engineering.ipynb
-│   └── 02_Model_Training_and_Evaluation.ipynb
-├── data/                     # Dataset directory
-└── results/                  # Evaluation plots and metrics
-```
+## Data
 
-## Quick Start
+The default download target is Kaggle's [Prediction of Insurance Claim](https://www.kaggle.com/datasets/thedevastator/prediction-of-insurance-claim). The expected target is `is_claim`; if a source uses another target name, pass a prepared dataset with that column or update the pipeline deliberately. `data/` and generated `results/` files are intentionally excluded from version control.
+
+## Run locally
 
 ```bash
-# Clone the repository
 git clone https://github.com/mzquadri/Insurance-Claims-Prediction-ML.git
 cd Insurance-Claims-Prediction-ML
-
-# Install dependencies
+python -m venv .venv
+.venv\Scripts\activate  # Windows PowerShell
 pip install -r requirements.txt
 
-# Run the full pipeline
+# Requires configured Kaggle credentials and acceptance of the source dataset terms.
 python src/data_pipeline.py --download
-python src/model_training.py --model xgboost --cv_folds 5
+python src/model_training.py --model random_forest --cv_folds 5
 python src/calibration.py --model_path results/best_model.pkl
 python src/threshold_optimizer.py --model_path results/calibrated_model.pkl
+python src/explainability.py --model_path results/best_model.pkl
 ```
 
-## Results
+Calibration-method and decision-threshold selection should be evaluated on a validation set separate from the final untouched test set. The supplied scripts are exploratory and do not implement a complete governance or deployment workflow.
 
-| Model | Accuracy | AUC-ROC | Brier Score | Log Loss |
-|-------|----------|---------|-------------|----------|
-| Logistic Regression | 82.3% | 0.841 | 0.142 | 0.421 |
-| Random Forest | 85.7% | 0.893 | 0.118 | 0.378 |
-| XGBoost | 87.2% | 0.912 | 0.104 | 0.341 |
-| LightGBM | 87.5% | 0.916 | 0.101 | 0.335 |
+## Verify the checkout
 
-### Calibration Results
+```bash
+python scripts/check_repository.py
+python scripts/smoke_test.py
+```
 
-Post-calibration Brier scores improve by ~15%, yielding more reliable probability estimates for downstream business decisions.
+The smoke test uses a small in-memory fixture. It does not download data, train a claim model, or validate real-world performance.
 
-## Key Features
+## Project layout
 
-- **Probability Calibration**: Ensures predicted probabilities align with true event frequencies
-- **Threshold Optimization**: Selects decision threshold that maximizes business value (cost-sensitive)
-- **SHAP Explainability**: Global and local feature importance for transparent decision-making
-- **Cross-Validation**: Stratified K-Fold with proper data leakage prevention
+```text
+src/          Pipeline, modelling, calibration, threshold, and SHAP modules
+notebooks/    Exploratory notebooks
+scripts/      Repository and preprocessing smoke checks
+results/      Ignored generated artifacts
+```
 
-## Technical Stack
+## License
 
-- **ML**: scikit-learn, XGBoost, LightGBM
-- **Explainability**: SHAP
-- **Visualization**: Matplotlib, Seaborn
-- **Data**: Pandas, NumPy
-
-## Author
-
-**Mohd Zamin Quadri** - M.Sc. Mathematics in Science and Engineering, Technical University of Munich
-
-[![LinkedIn](https://img.shields.io/badge/LinkedIn-mohd--zamin-blue)](https://www.linkedin.com/in/mohd-zamin/)
-[![GitHub](https://img.shields.io/badge/GitHub-mzquadri-black)](https://github.com/mzquadri)
+MIT. See [LICENSE](LICENSE).
