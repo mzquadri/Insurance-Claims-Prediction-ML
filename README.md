@@ -1,6 +1,10 @@
 # Insurance Claims Prediction: Research Pipeline
 
-An experimental binary-classification pipeline for studying insurance-claim modelling, probability calibration, threshold selection, and feature attribution. It is a learning and research artifact, not a production underwriting, pricing, fraud, or claims-decision system.
+Predicting whether a policy will file a claim is only half the problem — the model's probabilities also have to mean something, and someone has to explain them. This pipeline works through all three parts: binary classifiers (logistic regression, random forest, optional XGBoost/LightGBM), probability calibration with Platt scaling or isotonic regression, cost-sensitive threshold selection, and SHAP-based feature attribution. It is a learning and research artifact, not a production underwriting, pricing, fraud, or claims-decision system.
+
+<p align="center">
+  <img src="docs/diagrams/pipeline.svg" alt="Pipeline: Kaggle data to calibrated, explainable claim model" width="940">
+</p>
 
 ## Scope and evidence
 
@@ -57,6 +61,7 @@ src/          Pipeline, modelling, calibration, threshold, and SHAP modules
 notebooks/    Exploratory notebooks
 scripts/      Repository and preprocessing smoke checks
 results/      Ignored generated artifacts
+docs/diagrams/  SVG overview of the pipeline
 ```
 
 ## License
