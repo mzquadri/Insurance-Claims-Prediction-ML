@@ -7,12 +7,11 @@ import argparse
 import subprocess
 from pathlib import Path
 
+import joblib
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder, StandardScaler
-import joblib
-
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 RESULTS_DIR = Path(__file__).resolve().parent.parent / "results"
@@ -120,14 +119,23 @@ def encode_and_split(
     df: pd.DataFrame,
     target_col: str = "is_claim",
     test_size: float = 0.2,
+    validation_size: float = 0.25,
     random_state: int = 42,
 ):
     """
-    Encode categorical variables, scale numerics, and split data.
+    Encode categorical variables, scale numerics, and split into three parts.
+
+    `validation_size` is a fraction of the training rows, not of the whole frame.
+    Pass 0 to get only train and test, in which case "X_validation" and
+    "y_validation" come back as None and any label-driven selection has nowhere
+    honest to happen.
 
     Returns
     -------
-    X_train, X_test, y_train, y_test, feature_names, preprocessor_info
+    dict with X_train, y_train, X_validation, y_validation, X_test, y_test and
+    feature_names. This used to be a five-tuple of train and test only; the names
+    are explicit because there are now three parts and mixing them up is exactly
+    the failure this split exists to prevent.
     """
     # Identify target
     target_candidates = [
@@ -152,6 +160,17 @@ def encode_and_split(
         X, y, test_size=test_size, random_state=random_state, stratify=y
     )
 
+    # A third part, carved out of training, for decisions that have to be made by
+    # looking at labels: which calibrator to keep, and where to put the decision
+    # threshold. Without it there is nowhere to make those choices except the test
+    # set, and a choice made there cannot also be scored there. See src/benchmark.py.
+    X_validation, y_validation = None, None
+    if validation_size > 0:
+        X_train, X_validation, y_train, y_validation = train_test_split(
+            X_train, y_train, test_size=validation_size,
+            random_state=random_state, stratify=y_train,
+        )
+
     # Encode categoricals
     label_encoders = {}
     for col in X_train.select_dtypes(include=["object", "category"]).columns:
@@ -160,24 +179,37 @@ def encode_and_split(
         unknown_value = -1
         mapping = {label: index for index, label in enumerate(le.classes_)}
         X_test[col] = X_test[col].astype(str).map(mapping).fillna(unknown_value).astype(int)
+        if X_validation is not None:
+            X_validation[col] = (X_validation[col].astype(str).map(mapping)
+                                 .fillna(unknown_value).astype(int))
         label_encoders[col] = le
 
     feature_names = X_train.columns.tolist()
 
-    # Scale numeric features
+    # Scale numeric features. Fitted on training rows only, so neither the
+    # validation nor the test set influences the representation.
     scaler = StandardScaler()
     X_train = scaler.fit_transform(X_train)
     X_test = scaler.transform(X_test)
+    if X_validation is not None:
+        X_validation = scaler.transform(X_validation)
 
     # Save preprocessor artifacts
     RESULTS_DIR.mkdir(exist_ok=True)
     joblib.dump(scaler, RESULTS_DIR / "scaler.pkl")
     joblib.dump(label_encoders, RESULTS_DIR / "label_encoders.pkl")
 
-    print(f"Train: {X_train.shape[0]} samples | Test: {X_test.shape[0]} samples")
+    print(f"Train: {X_train.shape[0]} samples | Test: {X_test.shape[0]} samples", end="")
+    print(f" | Validation: {X_validation.shape[0]} samples"
+          if X_validation is not None else " | no validation split requested")
     print(f"Positive rate: {y_train.mean():.3f} (train), {y_test.mean():.3f} (test)")
 
-    return X_train, X_test, y_train, y_test, feature_names
+    return {
+        "X_train": X_train, "y_train": y_train,
+        "X_validation": X_validation, "y_validation": y_validation,
+        "X_test": X_test, "y_test": y_test,
+        "feature_names": feature_names,
+    }
 
 
 def run_pipeline(data_dir: Path = DATA_DIR):

@@ -1,7 +1,7 @@
 """Run a small preprocessing check without downloading external data."""
 
-from pathlib import Path
 import sys
+from pathlib import Path
 
 import pandas as pd
 
@@ -24,14 +24,24 @@ def main() -> None:
     )
     cleaned = clean_data(data)
     featured = engineer_features(cleaned)
-    X_train, X_test, y_train, y_test, feature_names = encode_and_split(featured)
+    parts = encode_and_split(featured, validation_size=0.25)
+    names = parts["feature_names"]
 
-    if X_train.shape[1] != len(feature_names) or X_test.shape[1] != len(feature_names):
-        raise SystemExit("Feature matrices do not match the documented feature names.")
-    if set(y_train) != {0, 1} or set(y_test) != {0, 1}:
-        raise SystemExit("Stratified split did not preserve both classes.")
+    for split in ("X_train", "X_validation", "X_test"):
+        if parts[split] is None:
+            raise SystemExit(f"{split} is missing; the three-way split did not run.")
+        if parts[split].shape[1] != len(names):
+            raise SystemExit(f"{split} does not match the documented feature names.")
 
-    print(f"Preprocessing smoke test passed: {X_train.shape[1]} features.")
+    # The selection set has to be disjoint from both of the others, or the
+    # threshold and calibrator choices have nowhere honest to be made.
+    total = sum(len(parts[part]) for part in ("y_train", "y_validation", "y_test"))
+    if total != len(featured):
+        raise SystemExit("The three splits do not partition the rows.")
+
+    print(f"Preprocessing smoke test passed: {parts['X_train'].shape[1]} features, "
+          f"{len(parts['y_train'])} train / {len(parts['y_validation'])} validation / "
+          f"{len(parts['y_test'])} test.")
 
 
 if __name__ == "__main__":

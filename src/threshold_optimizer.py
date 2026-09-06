@@ -6,17 +6,14 @@ Selects the optimal decision threshold that maximizes expected business value.
 import argparse
 from pathlib import Path
 
-import numpy as np
-import matplotlib.pyplot as plt
 import joblib
+import matplotlib.pyplot as plt
+import numpy as np
 from sklearn.metrics import (
-    precision_recall_curve,
-    f1_score,
     accuracy_score,
     confusion_matrix,
-    roc_curve,
+    f1_score,
 )
-
 
 RESULTS_DIR = Path(__file__).resolve().parent.parent / "results"
 
@@ -24,7 +21,7 @@ RESULTS_DIR = Path(__file__).resolve().parent.parent / "results"
 # ──────────────────────────────────────────────
 # Cost-sensitive threshold optimization
 # ──────────────────────────────────────────────
-def compute_business_value(y_true, y_pred, cost_matrix: dict = None):
+def compute_business_value(y_true, y_pred, cost_matrix: dict | None = None):
     """
     Compute expected business value given a cost matrix.
 
@@ -56,8 +53,27 @@ def compute_business_value(y_true, y_pred, cost_matrix: dict = None):
     return value
 
 
+def metrics_at_threshold(y_true, y_prob, threshold: float, method: str = "fixed"):
+    """Score a fixed threshold on a given set.
+
+    Separated from the search so that a threshold found on one set can be
+    reported on another, which is the only honest way to report it.
+    """
+    y_pred = (np.asarray(y_prob) >= threshold).astype(int)
+    tn, fp, fn, tp = confusion_matrix(y_true, y_pred).ravel()
+    return {
+        "threshold": threshold,
+        "method": method,
+        "accuracy": accuracy_score(y_true, y_pred),
+        "sensitivity": tp / (tp + fn) if (tp + fn) > 0 else 0.0,
+        "specificity": tn / (tn + fp) if (tn + fp) > 0 else 0.0,
+        "precision": tp / (tp + fp) if (tp + fp) > 0 else 0.0,
+        "f1": f1_score(y_true, y_pred, zero_division=0),
+    }
+
+
 def find_optimal_threshold(
-    y_true, y_prob, method: str = "f1", cost_matrix: dict = None
+    y_true, y_prob, method: str = "f1", cost_matrix: dict | None = None
 ):
     """
     Find the optimal classification threshold.
@@ -124,20 +140,7 @@ def find_optimal_threshold(
 
     print(f"\nOptimal threshold ({method}): {best_threshold:.2f}")
 
-    # Metrics at optimal threshold
-    y_pred_optimal = (y_prob >= best_threshold).astype(int)
-    tn, fp, fn, tp = confusion_matrix(y_true, y_pred_optimal).ravel()
-
-    metrics = {
-        "threshold": best_threshold,
-        "method": method,
-        "accuracy": accuracy_score(y_true, y_pred_optimal),
-        "sensitivity": tp / (tp + fn),
-        "specificity": tn / (tn + fp),
-        "precision": tp / (tp + fp) if (tp + fp) > 0 else 0,
-        "f1": f1_score(y_true, y_pred_optimal),
-    }
-
+    metrics = metrics_at_threshold(y_true, y_prob, best_threshold, method=method)
     for k, v in metrics.items():
         if isinstance(v, float):
             print(f"  {k:20s}: {v:.4f}")
@@ -147,8 +150,9 @@ def find_optimal_threshold(
     return best_threshold, metrics, results
 
 
-def plot_threshold_analysis(y_true, y_prob, save_dir: Path = RESULTS_DIR):
+def plot_threshold_analysis(y_true, y_prob, save_dir: Path | None = None):
     """Plot threshold vs. various metrics."""
+    save_dir = RESULTS_DIR if save_dir is None else save_dir
     thresholds = np.arange(0.01, 1.0, 0.01)
     sensitivities, specificities, precisions, f1s, accuracies = [], [], [], [], []
 
@@ -164,7 +168,7 @@ def plot_threshold_analysis(y_true, y_prob, save_dir: Path = RESULTS_DIR):
         f1s.append(2 * prec * sens / (prec + sens) if (prec + sens) > 0 else 0)
         accuracies.append((tp + tn) / (tp + tn + fp + fn))
 
-    fig, axes = plt.subplots(1, 2, figsize=(16, 6))
+    _, axes = plt.subplots(1, 2, figsize=(16, 6))
 
     # Metrics vs threshold
     axes[0].plot(
@@ -200,23 +204,46 @@ def plot_threshold_analysis(y_true, y_prob, save_dir: Path = RESULTS_DIR):
 def run_threshold_optimization(model_path: str):
     """Run threshold optimization pipeline."""
     model = joblib.load(model_path)
-    data = np.load(RESULTS_DIR / "processed_data.npz")
+    # Closed rather than left open. An NpzFile holds the archive handle until it
+    # is closed, which on Windows blocks the directory from being removed.
+    with np.load(RESULTS_DIR / "processed_data.npz") as archive:
+        data = dict(archive.items())
     X_test, y_test = data["X_test"], data["y_test"]
 
+    # The threshold is chosen against validation labels and then scored against
+    # test labels. Choosing it on the test set and reporting the value there, as
+    # this function used to, cannot come out worse than choosing it anywhere
+    # else, because the search maximises the very quantity being reported.
+    # src/benchmark.py measures the size of that over two hundred repartitions.
+    if "X_validation" not in data:
+        raise SystemExit(
+            "processed_data.npz has no validation split. Rerun "
+            "src/data_pipeline.py, which now produces one. A threshold selected "
+            "on the test set cannot honestly be reported on the test set."
+        )
+    X_validation, y_validation = data["X_validation"], data["y_validation"]
+
+    y_prob_validation = model.predict_proba(X_validation)[:, 1]
     y_prob = model.predict_proba(X_test)[:, 1]
 
     print("=" * 50)
     print("THRESHOLD OPTIMIZATION")
     print("=" * 50)
+    print(f"Thresholds selected on {len(y_validation)} validation rows, "
+          f"reported on {len(y_test)} test rows.")
 
-    # F1-based threshold
-    t_f1, m_f1, _ = find_optimal_threshold(y_test, y_prob, method="f1")
+    # Each threshold is selected on validation, then the metrics reported beside
+    # it are recomputed on the test set at that fixed threshold.
+    t_f1, _, _ = find_optimal_threshold(y_validation, y_prob_validation, method="f1")
+    m_f1 = metrics_at_threshold(y_test, y_prob, t_f1)
 
-    # Youden's J
-    t_youden, m_youden, _ = find_optimal_threshold(y_test, y_prob, method="youden")
+    t_youden, _, _ = find_optimal_threshold(
+        y_validation, y_prob_validation, method="youden")
+    m_youden = metrics_at_threshold(y_test, y_prob, t_youden)
 
-    # Business value
-    t_biz, m_biz, _ = find_optimal_threshold(y_test, y_prob, method="business")
+    t_biz, _, _ = find_optimal_threshold(
+        y_validation, y_prob_validation, method="business")
+    m_biz = metrics_at_threshold(y_test, y_prob, t_biz)
 
     # Comparison
     print(
@@ -229,11 +256,22 @@ def run_threshold_optimization(model_path: str):
         ("Business Value", t_biz, m_biz),
     ]:
         print(
-            f"{name:<25} {t:<12.3f} {m['f1']:<10.4f} {m['sensitivity']:<14.4f} {m['specificity']:<14.4f}"
+            f"{name:<25} {t:<12.3f} {m['f1']:<10.4f} "
+            f"{m['sensitivity']:<14.4f} {m['specificity']:<14.4f}"
         )
+
+    # Persist the chosen thresholds. They are part of the decision rule, not a
+    # by-product of it: a calibrated model plus a threshold is what makes a
+    # prediction, and reproducing a reported number needs both.
+    RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+    joblib.dump({"f1": t_f1, "youden": t_youden, "business": t_biz},
+                RESULTS_DIR / "optimal_thresholds.pkl")
+    print(f"\nThresholds saved to {RESULTS_DIR / 'optimal_thresholds.pkl'}")
 
     # Plot
     plot_threshold_analysis(y_test, y_prob)
+
+    return {"f1": t_f1, "youden": t_youden, "business": t_biz}
 
 
 if __name__ == "__main__":
