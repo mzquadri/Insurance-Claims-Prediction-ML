@@ -1,11 +1,10 @@
-numpy>=1.24.0
-pandas>=2.0.0
-scikit-learn>=1.2.0
-xgboost>=1.7.0
-lightgbm>=3.3.0
-shap>=0.42.0
-matplotlib>=3.7.0
-seaborn>=0.12.0
-imbalanced-learn>=0.10.0
-kaggle>=1.5.0
-joblib>=1.2.0
+# What the reproducible path needs: the benchmark, the tests and the figures.
+# Pinned to the versions the recorded results in results/benchmark.json were
+# produced with. The optional extras below are not needed for any of that.
+
+numpy==2.4.3
+pandas==2.3.3
+scikit-learn==1.8.0
+scipy==1.17.0
+matplotlib==3.10.8
+joblib==1.5.3
