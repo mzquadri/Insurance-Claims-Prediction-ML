@@ -6,20 +6,23 @@ Provides global and local feature importance explanations.
 import argparse
 from pathlib import Path
 
-import numpy as np
-import matplotlib.pyplot as plt
 import joblib
-import shap
-
+import matplotlib.pyplot as plt
+import numpy as np
 
 RESULTS_DIR = Path(__file__).resolve().parent.parent / "results"
 
 
-def explain_global(model, X_train, feature_names, save_dir: Path = RESULTS_DIR):
+def explain_global(model, X_train, feature_names, save_dir: Path | None = None):
     """
     Generate global SHAP explanations.
     Shows which features are most important across all predictions.
     """
+    # Imported here rather than at module scope so this file can be read,
+    # compiled and imported without shap installed. shap is optional, and only
+    # the paths that actually compute attributions need it.
+    import shap
+
     print("Computing SHAP values (this may take a moment)...")
 
     # Use TreeExplainer for tree-based models, KernelExplainer for others
@@ -34,6 +37,7 @@ def explain_global(model, X_train, feature_names, save_dir: Path = RESULTS_DIR):
     if isinstance(shap_values, list):
         shap_values = shap_values[1]  # Class 1 (claim) SHAP values
 
+    save_dir = RESULTS_DIR if save_dir is None else save_dir
     save_dir.mkdir(exist_ok=True)
 
     # Summary plot (beeswarm)
@@ -76,12 +80,14 @@ def explain_local(
     X_sample,
     feature_names,
     idx: int = 0,
-    save_dir: Path = RESULTS_DIR,
+    save_dir: Path | None = None,
 ):
     """
     Generate local SHAP explanation for a single prediction.
     Shows how each feature contributed to a specific prediction.
     """
+    import shap
+
     try:
         shap_values = explainer.shap_values(X_sample[idx : idx + 1])
     except Exception:
@@ -103,6 +109,7 @@ def explain_local(
     )
     plt.title(f"SHAP Local Explanation (Sample {idx})", fontsize=13)
     plt.tight_layout()
+    save_dir = RESULTS_DIR if save_dir is None else save_dir
     save_dir.mkdir(exist_ok=True)
     plt.savefig(save_dir / f"shap_local_sample_{idx}.png", dpi=150, bbox_inches="tight")
     plt.close()
@@ -110,18 +117,19 @@ def explain_local(
 
 
 def explain_feature_dependence(
-    shap_values, X_data, feature_names, top_n: int = 4, save_dir: Path = RESULTS_DIR
+    shap_values, X_data, feature_names, top_n: int = 4, save_dir: Path | None = None
 ):
     """
     Plot SHAP dependence plots for top features.
     Shows how a feature's value affects the prediction.
     """
+
     mean_abs_shap = np.abs(shap_values).mean(axis=0)
     top_indices = np.argsort(mean_abs_shap)[-top_n:][::-1]
 
-    fig, axes = plt.subplots(2, 2, figsize=(16, 12))
+    _, axes = plt.subplots(2, 2, figsize=(16, 12))
 
-    for ax, idx in zip(axes.flat, top_indices):
+    for ax, idx in zip(axes.flat, top_indices, strict=False):
         feature_name = feature_names[idx]
         ax.scatter(
             X_data[:, idx],
@@ -138,6 +146,7 @@ def explain_feature_dependence(
 
     plt.suptitle("SHAP Dependence Plots (Top Features)", fontsize=15, fontweight="bold")
     plt.tight_layout()
+    save_dir = RESULTS_DIR if save_dir is None else save_dir
     save_dir.mkdir(exist_ok=True)
     plt.savefig(save_dir / "shap_dependence.png", dpi=150, bbox_inches="tight")
     plt.close()
@@ -147,7 +156,8 @@ def explain_feature_dependence(
 def run_explainability(model_path: str):
     """Run full SHAP explainability pipeline."""
     model = joblib.load(model_path)
-    data = np.load(RESULTS_DIR / "processed_data.npz")
+    with np.load(RESULTS_DIR / "processed_data.npz") as archive:
+        data = dict(archive.items())
     X_train, X_test = data["X_train"], data["X_test"]
     feature_names = joblib.load(RESULTS_DIR / "feature_names.pkl")
 

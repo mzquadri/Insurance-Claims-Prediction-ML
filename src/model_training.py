@@ -8,20 +8,20 @@ import json
 import warnings
 from pathlib import Path
 
+import joblib
 import numpy as np
 import pandas as pd
-import joblib
-from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.model_selection import StratifiedKFold, cross_validate
+from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import (
     accuracy_score,
-    roc_auc_score,
     brier_score_loss,
-    log_loss,
     classification_report,
+    log_loss,
     make_scorer,
+    roc_auc_score,
 )
+from sklearn.model_selection import StratifiedKFold, cross_validate
 
 try:
     import xgboost as xgb
@@ -100,7 +100,7 @@ def get_models():
 # ──────────────────────────────────────────────
 # Cross-validation
 # ──────────────────────────────────────────────
-def cross_validate_models(X_train, y_train, models: dict = None, n_folds: int = 5):
+def cross_validate_models(X_train, y_train, models: dict | None = None, n_folds: int = 5):
     """
     Run stratified K-fold cross-validation on all models.
 
@@ -147,10 +147,12 @@ def cross_validate_models(X_train, y_train, models: dict = None, n_folds: int = 
         }
 
         print(
-            f"  Accuracy:    {results[name]['accuracy']:.4f} (+/- {results[name]['accuracy_std']:.4f})"
+            f"  Accuracy:    {results[name]['accuracy']:.4f} "
+            f"(+/- {results[name]['accuracy_std']:.4f})"
         )
         print(
-            f"  AUC-ROC:     {results[name]['roc_auc']:.4f} (+/- {results[name]['roc_auc_std']:.4f})"
+            f"  AUC-ROC:     {results[name]['roc_auc']:.4f} "
+            f"(+/- {results[name]['roc_auc_std']:.4f})"
         )
         print(f"  Brier Score: {results[name]['brier_score']:.4f}")
         print(f"  Log Loss:    {results[name]['log_loss']:.4f}")
