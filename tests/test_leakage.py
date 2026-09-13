@@ -149,6 +149,37 @@ class ThreeWaySplit(unittest.TestCase):
         train_means = np.abs(self.parts["X_train"].mean(axis=0))
         self.assertLess(train_means.max(), 1e-9)
 
+    def test_no_row_of_features_appears_in_two_parts(self):
+        """The other standard leak, and the one nothing here measured.
+
+        A policy whose features are identical to one in training is scored on
+        something the model has already seen, and a random split does not
+        prevent it. On the portfolio as generated there are none at all across
+        the three parts, so this is a count rather than a bound.
+
+        How much it takes to break it, measured: rounding mileage to the nearest
+        ten thousand and both durations to whole years still gives none, and
+        collisions only start once driver age and engine power are rounded to
+        tens as well, at which point 22 of 6,000 rows collide. So this is not a
+        sensitive detector of small changes. It is a statement about a property
+        the README's leakage argument otherwise leaves unexamined, and the test
+        below shows that the comparison finds a duplicate when there is one.
+        """
+        for left, right in (("X_train", "X_validation"),
+                            ("X_train", "X_test"),
+                            ("X_validation", "X_test")):
+            with self.subTest(pair=f"{left}/{right}"):
+                self.assertEqual(len(self.rows(left) & self.rows(right)), 0)
+
+    def test_the_same_comparison_finds_a_duplicate_that_is_there(self):
+        """The paired check, in the style of the rest of this file."""
+        train = self.rows("X_train")
+        planted = set(self.rows("X_test")) | {next(iter(train))}
+        self.assertEqual(len(train & planted), 1)
+
+    def rows(self, name: str) -> set:
+        return {tuple(row) for row in self.parts[name].tolist()}
+
 
 class ChoosingAThresholdOnTheSetItIsScoredOn(unittest.TestCase):
     """The defect this repository had, stated as a property."""

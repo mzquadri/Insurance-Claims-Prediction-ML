@@ -177,7 +177,7 @@ pip install -r requirements.txt
 
 python -m src.synthetic_portfolio                # what the generated portfolio is
 python -m src.benchmark                          # writes results/benchmark.json
-python -m unittest discover -s tests             # 33 tests
+python -m unittest discover -s tests             # 35 tests
 python scripts/figures/generate_figures.py       # writes docs/figures/
 python scripts/check_repository.py               # README against the recorded results
 python scripts/check_reproducibility.py          # rerun, and check the findings survive
