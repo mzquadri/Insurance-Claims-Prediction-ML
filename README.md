@@ -240,8 +240,14 @@ palette call in the first and at a shap plotting call in the second whose
 signature has changed. They are kept as the record of where this repository
 started, and running them needs the extras in `requirements-optional.txt`.
 
+The diagram below is that Kaggle-oriented path, the one in `src/` that takes a
+downloaded CSV, not the one the results on this page come from. Every stage in it
+is real code and, as of this pass, the five of them run end to end. It said
+`data/` and `results/` were both gitignored, which stopped being true when
+`results/benchmark.json` became the file every number here is read from.
+
 <p align="center">
-  <img src="docs/diagrams/pipeline.svg" alt="Pipeline overview" width="940">
+  <img src="docs/diagrams/pipeline.svg" alt="The Kaggle-oriented path in src/" width="940">
 </p>
 
 ## Data source
