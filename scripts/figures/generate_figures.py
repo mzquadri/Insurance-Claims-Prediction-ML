@@ -129,8 +129,16 @@ def figure_02_selection_optimism(data: dict) -> None:
             "worst_single_split_overstatement": take(
                 "thresholds", name, "f1", "across_repartitions",
                 "worst_single_split_overstatement"),
+            "repeats": take("thresholds", name, "f1", "across_repartitions",
+                            "repeats"),
         })
         for name in LABELS]
+    # Both counts in this figure are read rather than typed. The caption used to
+    # say 600 and the axis 200, neither of which would have moved if the number
+    # of repeats did.
+    per_model = {entry["repeats"] for _, entry in entries}
+    repeats = per_model.pop() if len(per_model) == 1 else None
+    total = sum(entry["repeats"] for _, entry in entries)
 
     fig, ax = plt.subplots(figsize=(11.4, 6.4))
     fig.subplots_adjust(left=0.105, right=0.955, top=0.755, bottom=0.235)
@@ -163,8 +171,10 @@ def figure_02_selection_optimism(data: dict) -> None:
     ax.set_xticks(positions)
     ax.set_xticklabels([LABELS[name] for name, _ in entries], fontsize=11,
                        color=ps.INK)
-    ax.set_ylabel("F1 on the reported set, mean over 200 repartitions",
-                  fontsize=11, color=ps.MUTED)
+    ax.set_ylabel(
+        "F1 on the reported set, mean over "
+        + (f"{repeats} repartitions" if repeats else "the repartitions"),
+        fontsize=11, color=ps.MUTED)
     ax.set_ylim(0, max(chosen_here) * 1.36)
     ax.legend(loc="upper right", frameon=False, fontsize=10.4, labelcolor=ps.MUTED)
     ps.clean(ax, grid_axis="y")
@@ -178,8 +188,8 @@ def figure_02_selection_optimism(data: dict) -> None:
     ps.footnote(fig, [
         "The amber bar is not an estimate that came out high. The search returns "
         "whichever threshold maximises the quantity then",
-        f"reported, so it can only tie or win: across 600 repartitions the gap was "
-        f"never negative, and reached {worst:.3f} F1 at worst.",
+        f"reported, so it can only tie or win: across {total} repartitions the gap "
+        f"was never negative, and reached {worst:.3f} F1 at worst.",
     ])
     ps.save(fig, FIGURES, "02_selection_optimism", sources=take.read)
 

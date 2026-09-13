@@ -111,9 +111,12 @@ def claims(data: dict) -> list[tuple[str, str]]:
             f"{across['mean_overstatement']:+.4f} |",
             f"the {NAMES[name].lower()} threshold row"))
 
+    repartitions = sum(thresholds[name]["f1"]["across_repartitions"]["repeats"]
+                       for name in MODELS)
     business = [thresholds[name]["business"]["across_repartitions"]["mean_overstatement"]
                 for name in MODELS]
     out += [
+        (f"In {repartitions} repartitions run here", "the repartition count"),
         (f"from\n+{min(business):,.0f} to +{max(business):,.0f} units",
          "the business value range"),
         (f"gap reached {max(thresholds[name]['f1']['across_repartitions'][
@@ -240,6 +243,28 @@ def figure_claims(data: dict) -> list[str]:
     return failures
 
 
+
+def test_count_claim() -> list[str]:
+    """The README quotes a test count beside the command that produces it.
+
+    Discovered rather than counted from the source, because discovery is what
+    the command in the README and the CI job both do, so it is the number a
+    reader would see. Nothing else here checked it, and it had already drifted.
+    """
+    import unittest
+
+    suite = unittest.defaultTestLoader.discover(
+        str(ROOT / "tests"), top_level_dir=str(ROOT))
+    total = suite.countTestCases()
+    flat = re.sub(r"\s+", " ", (ROOT / "README.md").read_text(encoding="utf-8"))
+    print(f"  {total} tests discovered")
+    if f"# {total} tests" in flat:
+        return []
+    stated = re.search(r"unittest discover -s tests\s*# (\d+) tests", flat)
+    return [f"  the README says {stated.group(1) if stated else 'no'} tests "
+            f"beside the discover command; discovery finds {total}"]
+
+
 def main() -> int:
     missing = [path for path in REQUIRED_FILES if not (ROOT / path).is_file()]
     if missing:
@@ -265,6 +290,7 @@ def main() -> int:
           f"found in the README")
 
     failures += figure_claims(data)
+    failures += test_count_claim()
 
     ratios = ratio_claims(data)
     for phrase, actual, stated in ratios:
