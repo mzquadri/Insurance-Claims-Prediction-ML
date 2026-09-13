@@ -2,14 +2,16 @@
 
     python scripts/check_repository.py
 
-Checks that the files the README points at exist and compile, and that every
-number it quotes still matches `results/benchmark.json`. The second is the one
-that matters. A results file is easy to regenerate and a README is easy to forget,
-and a repository whose headline numbers no longer describe its own output is worse
-than one with no numbers at all.
+Checks that the files the README points at exist and compile, that every number it
+quotes still matches `results/benchmark.json`, and that the three committed
+figures were drawn from that same file. A results file is easy to regenerate and
+a README is easy to forget, and a repository whose headline numbers no longer
+describe its own output is worse than one with no numbers at all.
 
 Each claim is matched with its surrounding words included, so a value that has
 drifted into a different sentence does not accidentally satisfy a check.
+
+Run this before regenerating the figures, not after. It reads what is committed.
 """
 
 from __future__ import annotations
@@ -17,10 +19,18 @@ from __future__ import annotations
 import json
 import py_compile
 import re
+import struct
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 RESULTS = ROOT / "results" / "benchmark.json"
+FIGURES = ROOT / "docs" / "figures"
+
+#: tEXt key that scripts/figures/portfolio_style.py writes the source values to.
+BENCHMARK_KEY = "Benchmark"
+
+PNG_SIGNATURE = bytes([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A])
+NUL = bytes([0x00])
 
 REQUIRED_FILES = (
     "README.md",
@@ -154,6 +164,82 @@ def ratio_claims(data: dict) -> list[tuple[str, float, float]]:
     ]
 
 
+def png_text(path: Path) -> dict[str, str]:
+    """The tEXt entries of a PNG, read without a third-party imaging library."""
+    raw = path.read_bytes()
+    if raw[:len(PNG_SIGNATURE)] != PNG_SIGNATURE:
+        raise SystemExit(f"  {path.name} is not a PNG")
+    entries, offset = {}, 8
+    while offset + 8 <= len(raw):
+        length = struct.unpack(">I", raw[offset:offset + 4])[0]
+        kind = raw[offset + 4:offset + 8]
+        if kind == b"tEXt":
+            key, _, value = raw[offset + 8:offset + 8 + length].partition(NUL)
+            entries[key.decode("latin-1")] = value.decode("latin-1")
+        elif kind == b"IEND":
+            break
+        offset += 12 + length
+    return entries
+
+
+def figure_claims(data: dict) -> list[str]:
+    """Check the committed figures against the results they were drawn from.
+
+    The figures carry numbers a reader can see, and until now nothing tied them
+    to results/benchmark.json. Regenerating the benchmark and forgetting the
+    figures left three images stating superseded values, and continuous
+    integration was happy because it rendered them into the working tree and
+    never looked at what it had replaced.
+
+    Comparing bytes cannot do this. The figures use whichever of the fonts in
+    portfolio_style.FONTS the machine provides, so the same data rendered here
+    and on the Linux runner agree on every number and on none of the pixels.
+    What is compared is the values each figure recorded when it was written.
+    """
+    failures = []
+    present = sorted(path.name for path in FIGURES.glob("*.png"))
+    expected = sorted(Path(name).name for name in REQUIRED_FILES
+                      if name.startswith("docs/figures/"))
+    if present != expected:
+        failures.append(f"  docs/figures holds {present}, expected {expected}")
+
+    renderers, checked = set(), 0
+    for name in expected:
+        path = FIGURES / name
+        if not path.is_file():
+            continue
+        text = png_text(path)
+        renderers.add(text.get("Software", "unrecorded"))
+        if BENCHMARK_KEY not in text:
+            failures.append(
+                f"  {name} records no source values; rerun "
+                f"scripts/figures/generate_figures.py")
+            continue
+        for path_in_results, drawn in json.loads(text[BENCHMARK_KEY]).items():
+            node = data
+            for key in path_in_results.split("/"):
+                if not isinstance(node, dict) or key not in node:
+                    node = None
+                    break
+                node = node[key]
+            if node is None:
+                failures.append(f"  {name} was drawn from {path_in_results}, "
+                                f"which the results no longer contain")
+            elif node != drawn:
+                failures.append(f"  {name} shows {path_in_results} as {drawn}, "
+                                f"the results now say {node}")
+            checked += 1
+
+    # A figure regenerated on its own carries a different matplotlib version from
+    # the rest as soon as the pinned version moves, which is what a half-finished
+    # regeneration looks like.
+    if len(renderers) > 1:
+        failures.append(f"  the figures were not rendered together: {sorted(renderers)}")
+
+    print(f"  {checked} values behind {len(expected)} figures match the results")
+    return failures
+
+
 def main() -> int:
     missing = [path for path in REQUIRED_FILES if not (ROOT / path).is_file()]
     if missing:
@@ -178,6 +264,8 @@ def main() -> int:
     print(f"  {len(checks) - len(failures)} of {len(checks)} recorded numbers "
           f"found in the README")
 
+    failures += figure_claims(data)
+
     ratios = ratio_claims(data)
     for phrase, actual, stated in ratios:
         if abs(actual - stated) / stated > 0.08:
@@ -191,8 +279,8 @@ def main() -> int:
         print()
         for failure in failures:
             print(failure)
-        raise SystemExit(f"\n  {len(failures)} claims in the README no longer match "
-                         f"results/benchmark.json")
+        raise SystemExit(f"\n  {len(failures)} claims in the README or the "
+                         f"figures no longer match results/benchmark.json")
 
     print("  README and results/benchmark.json agree")
     return 0

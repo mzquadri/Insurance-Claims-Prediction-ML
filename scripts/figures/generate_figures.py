@@ -41,15 +41,37 @@ def load() -> dict:
     return json.loads(RESULTS.read_text(encoding="utf-8"))
 
 
+class Tap:
+    """Reads values out of the results and remembers which ones it handed over.
+
+    Every number in these figures comes through here, so what gets stamped into
+    the PNG is what the figure was actually drawn from rather than a second list
+    that has to be kept in step by hand. A value the figure stops reading stops
+    being stamped, and a value it starts reading is stamped without anyone
+    remembering to add it.
+    """
+
+    def __init__(self, data: dict) -> None:
+        self._data = data
+        self.read: dict[str, float] = {}
+
+    def __call__(self, *path: str) -> float:
+        node = self._data
+        for key in path:
+            node = node[key]
+        self.read["/".join(path)] = node
+        return node
+
+
 def figure_01_available_signal(data: dict) -> None:
     """How much is there to win, and how much does each model win?"""
-    reference = data["reference_points"]
-    floor = reference["bayes_floor"]["brier"]
-    uninformed = reference["brier_predicting_the_base_rate"]
+    take = Tap(data)
+    floor = take("reference_points", "bayes_floor", "brier")
+    uninformed = take("reference_points", "brier_predicting_the_base_rate")
     available = uninformed - floor
 
     names = list(LABELS)
-    captured = [(uninformed - data["models"][name]["test"]["brier"]) / available
+    captured = [(uninformed - take("models", name, "test", "brier")) / available
                 for name in names]
 
     fig, ax = plt.subplots(figsize=(11.4, 6.6))
@@ -90,13 +112,25 @@ def figure_01_available_signal(data: dict) -> None:
         "generating process is close to linear, which is why the",
         "logistic regression is hard to beat.",
     ], y=0.105)
-    ps.save(fig, FIGURES, "01_available_signal")
+    ps.save(fig, FIGURES, "01_available_signal", sources=take.read)
 
 
 def figure_02_selection_optimism(data: dict) -> None:
     """What does choosing a threshold on the set you report it on buy you?"""
-    entries = [(name, data["thresholds"][name]["f1"]["across_repartitions"])
-               for name in LABELS]
+    take = Tap(data)
+    entries = [
+        (name, {
+            "mean_reported_when_chosen_on_the_scoring_set": take(
+                "thresholds", name, "f1", "across_repartitions",
+                "mean_reported_when_chosen_on_the_scoring_set"),
+            "mean_reported_when_chosen_on_a_separate_set": take(
+                "thresholds", name, "f1", "across_repartitions",
+                "mean_reported_when_chosen_on_a_separate_set"),
+            "worst_single_split_overstatement": take(
+                "thresholds", name, "f1", "across_repartitions",
+                "worst_single_split_overstatement"),
+        })
+        for name in LABELS]
 
     fig, ax = plt.subplots(figsize=(11.4, 6.4))
     fig.subplots_adjust(left=0.105, right=0.955, top=0.755, bottom=0.235)
@@ -147,12 +181,12 @@ def figure_02_selection_optimism(data: dict) -> None:
         f"reported, so it can only tie or win: across 600 repartitions the gap was "
         f"never negative, and reached {worst:.3f} F1 at worst.",
     ])
-    ps.save(fig, FIGURES, "02_selection_optimism")
+    ps.save(fig, FIGURES, "02_selection_optimism", sources=take.read)
 
 
 def figure_03_calibration(data: dict) -> None:
     """What does calibration actually change?"""
-    calibration = data["calibration"]
+    take = Tap(data)
 
     fig, (left, right) = plt.subplots(1, 2, figsize=(12.2, 6.6))
     fig.subplots_adjust(left=0.082, right=0.965, top=0.70, bottom=0.255, wspace=0.27)
@@ -168,8 +202,8 @@ def figure_03_calibration(data: dict) -> None:
 
     for offset, (method, label, colour) in enumerate(
             zip(methods, method_labels, colours, strict=True)):
-        values = [calibration[name]["methods"][method]["test"]
-                  ["mean_absolute_error_against_truth"] * 100
+        values = [take("calibration", name, "methods", method, "test",
+                       "mean_absolute_error_against_truth") * 100
                   for name in LABELS]
         left.bar(positions + (offset - 1) * width, values, width, color=colour,
                  label=label)
@@ -186,8 +220,10 @@ def figure_03_calibration(data: dict) -> None:
     ps.clean(left, grid_axis="y")
 
     # Right: what each form of calibration does to the ranking.
-    posthoc = [calibration[name]["posthoc_platt_auc_shift"] for name in LABELS]
-    refit = [calibration[name]["refit_platt_auc_shift"] for name in LABELS]
+    posthoc = [take("calibration", name, "posthoc_platt_auc_shift")
+               for name in LABELS]
+    refit = [take("calibration", name, "refit_platt_auc_shift")
+             for name in LABELS]
 
     right.bar(positions - 0.17, posthoc, 0.32, color=ps.BLUE,
               label="Platt applied to the frozen model")
@@ -224,7 +260,7 @@ def figure_03_calibration(data: dict) -> None:
         "right panel shows. A map cannot reorder anything, so a gain that comes with "
         "a ranking change did not come from calibrating.",
     ], y=0.105)
-    ps.save(fig, FIGURES, "03_calibration")
+    ps.save(fig, FIGURES, "03_calibration", sources=take.read)
 
 
 def main() -> int:
