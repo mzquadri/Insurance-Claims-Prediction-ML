@@ -212,26 +212,34 @@ def encode_and_split(
     }
 
 
-def run_pipeline(data_dir: Path = DATA_DIR):
-    """Execute the full data pipeline."""
+def run_pipeline(data_dir: Path = DATA_DIR) -> dict:
+    """Execute the full data pipeline and write what the later stages load.
+
+    The archive this writes is the hand-off point for the whole repository:
+    `src/calibration.py`, `src/threshold_optimizer.py`, `src/explainability.py`
+    and `src/model_training.py` all read it and nothing else. Both of the first
+    two refuse to run unless it carries a validation split, and the message they
+    print says to rerun this script. So the archive has to contain every part
+    `encode_and_split` produced, not just the two it used to.
+    """
     df = load_data(data_dir)
     df = clean_data(df)
     df = engineer_features(df)
-    X_train, X_test, y_train, y_test, feature_names = encode_and_split(df)
+    parts = encode_and_split(df)
 
-    # Save processed data
+    # Written by name rather than by position. encode_and_split returned five
+    # values when there were two splits and returns a dict now that there are
+    # three, and unpacking the dict into the old five names is how this function
+    # came to raise ValueError before it wrote anything.
+    arrays = {name: value for name, value in parts.items()
+              if name != "feature_names" and value is not None}
+
     RESULTS_DIR.mkdir(exist_ok=True)
-    np.savez(
-        RESULTS_DIR / "processed_data.npz",
-        X_train=X_train,
-        X_test=X_test,
-        y_train=y_train,
-        y_test=y_test,
-    )
-    joblib.dump(feature_names, RESULTS_DIR / "feature_names.pkl")
-    print(f"\nProcessed data saved to {RESULTS_DIR}")
+    np.savez(RESULTS_DIR / "processed_data.npz", **arrays)
+    joblib.dump(parts["feature_names"], RESULTS_DIR / "feature_names.pkl")
+    print(f"\nSaved {', '.join(sorted(arrays))} to {RESULTS_DIR}")
 
-    return X_train, X_test, y_train, y_test, feature_names
+    return parts
 
 
 if __name__ == "__main__":

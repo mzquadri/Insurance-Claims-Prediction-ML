@@ -10,6 +10,10 @@ venv/
 .DS_Store
 Thumbs.db
 .ipynb_checkpoints/
-results/*.pkl
-results/*.png
-results/*.csv
+# results/ holds one committed file, benchmark.json, and everything else the
+# scripts write there is a by-product of a run. Listed by extension, which left
+# the .npz the pipeline writes and the cv_metrics.json model training writes
+# showing up as untracked files that look like they were meant to be committed.
+results/*
+!results/.gitkeep
+!results/benchmark.json
