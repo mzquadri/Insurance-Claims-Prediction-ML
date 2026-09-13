@@ -68,6 +68,28 @@ dependency. Several functions took `save_dir: Path = RESULTS_DIR`, which binds
 once at import and cannot be redirected. And the loaded `.npz` archives were never
 closed.
 
+Changing that return type then broke the script that feeds everything else.
+`run_pipeline` is the only caller that writes `results/processed_data.npz`, which
+`run_calibration`, `run_threshold_optimization`, `src/explainability.py` and
+`src/model_training.py` all read, and it still unpacked the five names
+`encode_and_split` used to return. `python -m src.data_pipeline` raised before it
+wrote anything, and past that it saved four of the six arrays, so the validation
+split would have been missing and both entry points would have refused, printing
+a message that tells the reader to rerun the script that could not run.
+
+The existing tests could not have caught it, because they build that archive
+themselves with `np.savez`. They proved the consumers work on an archive of the
+right shape without asking whether the producer writes one.
+`tests/test_pipeline_handoff.py` drives the real producer into the real
+consumers.
+
+One more, in a module that produces no number here: every Brier score
+`src/model_training.py` printed was `nan`. `make_scorer` took `needs_proba` until
+scikit-learn removed it, and now forwards an unrecognised keyword to the metric,
+so the scorer raised on every fold, `cross_validate` replaced each score with
+`nan`, and a blanket `warnings.filterwarnings("ignore")` at the top of the file
+swallowed the explanation. The same line was in the second notebook.
+
 ## The data
 
 `src.synthetic_portfolio` generates 40,000 policies with nine features, at a claim
@@ -161,9 +183,19 @@ python scripts/check_repository.py               # README against the recorded r
 python scripts/check_reproducibility.py          # rerun, and check the findings survive
 ```
 
-No data download, no Kaggle credentials, no GPU. Every number in this README is
-read from `results/benchmark.json`, and `scripts/check_repository.py` fails if the
-two stop agreeing.
+No data download and no Kaggle credentials. Every number in this README is read
+from `results/benchmark.json`, and so is every number drawn on the three figures,
+which record what they were read from inside the files themselves.
+`scripts/check_repository.py` fails if either stops agreeing with the results, or
+if the test count above stops matching what discovery finds.
+
+No GPU either, and that is a conclusion rather than an omission. scikit-learn is
+CPU-only and has no Intel XPU backend, so the accelerator on the machine these
+results come from cannot be reached at all, and the optional xgboost build offers
+CUDA and nothing else. The workload would not repay one in any case: the design
+matrix is a few megabytes, every model fits in seconds, and most of the running
+time goes on a Python loop calling `f1_score` once per threshold per repartition,
+which is interpreter overhead rather than arithmetic.
 
 The original Kaggle path still exists. `src/data_pipeline.py --download` needs
 credentials and acceptance of that dataset's terms, and produces no number in this
@@ -197,9 +229,15 @@ preprocessing path, but nothing checks their outputs. `src/explainability.py`
 needs SHAP, which is optional and not installed in the environment these results
 come from, so it has not been run here.
 
-The two notebooks are kept as they were executed. They call `encode_and_split`
-with its former two-way return and have not been rerun against the current
-three-way split.
+The two notebooks have never been run here, and no longer run anywhere. Not one
+cell in either carries an execution count or an output. They do not import the
+pipeline either: each defines its own generator, with its own columns and its own
+name for the target, so what they would print describes neither
+`src/synthetic_portfolio.py` nor any insurance data. Executed against currently
+installable versions of what they import, cells in both raise, at a seaborn
+palette call in the first and at a shap plotting call in the second whose
+signature has changed. They are kept as the record of where this repository
+started, and running them needs the extras in `requirements-optional.txt`.
 
 <p align="center">
   <img src="docs/diagrams/pipeline.svg" alt="Pipeline overview" width="940">

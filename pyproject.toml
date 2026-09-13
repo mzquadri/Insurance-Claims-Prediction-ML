@@ -5,9 +5,9 @@ line-length = 100
 select = ["E", "W", "F", "I", "UP", "B", "C4", "SIM", "RUF"]
 
 [tool.ruff.lint.per-file-ignores]
-# Notebook cells import where they are used, run top to bottom, and are kept as
-# they were executed rather than reformatted, so the cells still match the
-# outputs stored below them.
+# The notebooks are the record of where this repository started and are not
+# reformatted. Their cells import where they are used and run top to bottom,
+# which is ordinary in a notebook and is not worth rewriting them over.
 "notebooks/*.ipynb" = [
     "E402", "E501", "E741", "W291", "W293",
     "I001", "F401", "F541", "C408", "B905", "RUF005",

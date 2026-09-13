@@ -1,12 +1,13 @@
 # Only for the paths that are not part of the verified result: the Kaggle
-# download, the gradient boosting comparison in src/model_training.py, and the
-# SHAP attributions. None of these is exercised by the tests or by continuous
-# integration, and none produces a number in the README.
+# download, the boosted comparisons in src/model_training.py, the SHAP
+# attributions, and the two notebooks. None of these is exercised by the tests or
+# by continuous integration, and none produces a number in the README.
 
 -r requirements.txt
 
 xgboost==3.2.0         # src/model_training.py
 lightgbm>=4.0.0        # src/model_training.py, not installed or exercised here
 shap>=0.42.0           # src/explainability.py, not installed or exercised here
+seaborn>=0.12.0        # notebooks/, which nothing else here imports
 imbalanced-learn>=0.10.0
 kaggle>=1.5.0          # src/data_pipeline.py --download
