@@ -224,13 +224,14 @@ configurations rather than tuned models.
 ## What is exploratory
 
 `src/model_training.py` and `src/explainability.py` produce no number in this
-README. Continuous integration compiles them and the smoke test exercises the
-preprocessing path, but nothing checks their outputs. `src/explainability.py`
-needs SHAP, which is optional and not installed in the environment these results
-come from, so it has not been run here.
+README. The first is now run by `tests/test_pipeline_handoff.py`, far enough to
+check that its cross-validation reports a score rather than a `nan`, but nothing
+checks the model it trains or the comparison it prints. The second needs SHAP,
+which is optional and not installed in the environment these results come from,
+so it has not been run here at all.
 
-The two notebooks have never been run here, and no longer run anywhere. Not one
-cell in either carries an execution count or an output. They do not import the
+The two notebooks have never been run here. Not one cell in either carries an
+execution count or an output. They do not import the
 pipeline either: each defines its own generator, with its own columns and its own
 name for the target, so what they would print describes neither
 `src/synthetic_portfolio.py` nor any insurance data. Executed against currently
