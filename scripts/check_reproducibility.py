@@ -102,6 +102,31 @@ def values(data: dict) -> dict:
     return out
 
 
+
+def report_versions(recorded: dict, fresh: dict) -> None:
+    """Say what produced each of the two files, where either of them says.
+
+    Not a failure either way. Reruns on other builds are expected and the
+    tolerance below is what decides whether one matters. This exists because the
+    committed results were produced before the benchmark recorded any of this, so
+    the only statement about which versions made them is a comment in
+    requirements.txt, and a reader should be told that rather than left to assume.
+    """
+    was = recorded.get("environment", {}).get("libraries")
+    now = fresh.get("environment", {}).get("libraries", {})
+    if not was:
+        print("  the recorded results predate the version record; requirements.txt "
+              "is the only statement of what produced them")
+        print("  this rerun: " + ", ".join(f"{k} {v}" for k, v in now.items()))
+        return
+    moved = [f"{k} {was[k]} -> {now.get(k, 'missing')}"
+             for k in was if was[k] != now.get(k)]
+    if moved:
+        print("  produced on different versions: " + ", ".join(moved))
+    else:
+        print("  same versions as the recorded run")
+
+
 def main() -> int:
     if not RECORDED.exists():
         raise SystemExit("  results/benchmark.json is missing; run python -m src.benchmark")
@@ -118,6 +143,8 @@ def main() -> int:
             print(completed.stderr[-2000:])
             raise SystemExit(f"  the benchmark failed with exit code {completed.returncode}")
         fresh = json.loads(fresh_path.read_text(encoding="utf-8"))
+
+    report_versions(recorded, fresh)
 
     failures = []
     recorded_findings, fresh_findings = findings(recorded), findings(fresh)
