@@ -5,7 +5,6 @@ and model comparison for insurance claims prediction.
 
 import argparse
 import json
-import warnings
 from pathlib import Path
 
 import joblib
@@ -37,7 +36,12 @@ try:
 except ImportError:
     HAS_LGB = False
 
-warnings.filterwarnings("ignore")
+# There was a blanket warnings.filterwarnings("ignore") here. It hid two things
+# at once: scikit-learn reporting that the Brier scorer in cross_validate_models
+# had failed and been replaced with nan, and a FutureWarning about an argument to
+# LogisticRegression that is deprecated for removal. A module that silences every
+# warning in the process for anyone who imports it buys quiet output at the price
+# of not being told when its own numbers stop being numbers.
 
 RESULTS_DIR = Path(__file__).resolve().parent.parent / "results"
 
@@ -50,7 +54,9 @@ def get_models():
     models = {
         "logistic_regression": LogisticRegression(
             C=1.0,
-            penalty="l2",
+            # penalty="l2" was here. It is the default, so passing it changed
+            # nothing, and scikit-learn 1.8 deprecates the argument for removal
+            # in 1.10. Dropped rather than respelled: the model is identical.
             solver="lbfgs",
             max_iter=1000,
             class_weight="balanced",
@@ -117,8 +123,16 @@ def cross_validate_models(X_train, y_train, models: dict | None = None, n_folds:
     scoring = {
         "accuracy": "accuracy",
         "roc_auc": "roc_auc",
+        # `needs_proba=True` was the scikit-learn 1.3 spelling. It was removed in
+        # 1.6, and make_scorer now forwards any unrecognised keyword to the metric
+        # itself, so the argument survived as a silent request to call
+        # brier_score_loss(..., needs_proba=True), which raises. cross_validate
+        # turns a scoring failure into a warning and a nan, and the blanket
+        # warnings filter this module used to install swallowed the warning, so
+        # every Brier score printed below was nan with nothing to say why.
         "neg_brier": make_scorer(
-            brier_score_loss, needs_proba=True, greater_is_better=False
+            brier_score_loss, response_method="predict_proba",
+            greater_is_better=False
         ),
         "neg_log_loss": "neg_log_loss",
     }
@@ -205,7 +219,11 @@ def train_best_model(X_train, y_train, X_test, y_test, model_name: str = "xgboos
     # Save model and metrics
     RESULTS_DIR.mkdir(exist_ok=True)
     joblib.dump(model, RESULTS_DIR / "best_model.pkl")
-    with open(RESULTS_DIR / "cv_metrics.json", "w") as f:
+    # Encoding and newline are stated. Without them Python writes in the
+    # platform default, which differs between Windows and Linux, so the same
+    # run produces different bytes depending on where it happened.
+    with open(RESULTS_DIR / "cv_metrics.json", "w",
+              encoding="utf-8", newline="\n") as f:
         json.dump(metrics, f, indent=2)
 
     print(f"Model saved to {RESULTS_DIR / 'best_model.pkl'}")
@@ -213,9 +231,15 @@ def train_best_model(X_train, y_train, X_test, y_test, model_name: str = "xgboos
 
 
 def load_processed_data():
-    """Load preprocessed data from disk."""
-    data = np.load(RESULTS_DIR / "processed_data.npz")
-    return data["X_train"], data["X_test"], data["y_train"], data["y_test"]
+    """Load preprocessed data from disk.
+
+    Closed rather than left open: an NpzFile holds the archive handle until it
+    is closed, which on Windows blocks the file from being replaced by a later
+    run of the pipeline.
+    """
+    with np.load(RESULTS_DIR / "processed_data.npz") as archive:
+        return (archive["X_train"], archive["X_test"],
+                archive["y_train"], archive["y_test"])
 
 
 if __name__ == "__main__":
